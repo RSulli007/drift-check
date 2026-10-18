@@ -1,9 +1,12 @@
 # Simple port scanner program using the built-in Socket module.
 # Port scanner tested on Virtual Box Linux machine.
 
+import json
 import socket
 import time
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timezone
+from pathlib import Path
 
 def check_port(target_ip, port):
      """Try to connect to one port. Return the port number if open, otherwise None."""
@@ -32,6 +35,28 @@ def scan_ports(target_host, starting_port, ending_port):
     return target_ip, open_ports
 
 
+def save_scan(target_host, target_ip, starting_port, ending_port, open_ports, elapsed):
+     """Save one scan result as a timestamped JSON file in the scans folder."""
+     scanned_at = datetime.now(timezone.utc)
+
+     record = {
+          "target": target_host,
+          "ip": target_ip,
+          "port_range": [starting_port, ending_port],
+          "open_ports": open_ports,
+          "scanned_at": scanned_at.isoformat(),
+          "duration_seconds": round(elapsed, 1),
+     }
+
+     scans_dir = Path("scans")
+     scans_dir.mkdir(exist_ok=True) # create the folder the first time
+
+     # Windows doesn't allow colons in filenames, so use a compact timestamp.
+     filename = scans_dir / f"scan_{target_ip}_{scanned_at.strftime('%Y%m%dT%H%M%SZ')}."
+     filename.write_text(json.dumps(record, indent=2))
+     return filename
+
+
 if __name__ == "__main__":
         host = input("Target host or IP: ")
         start = int(input("Starting port: "))
@@ -43,3 +68,7 @@ if __name__ == "__main__":
 
         print(f"Open ports on {ip}: {ports}")
         print(f"Scanned {end - start + 1} ports in {elapsed:.1f} seconds")
+
+        if ip:
+             saved = save_scan(host, ip, start, end, ports, elapsed)
+             print(f"Saved results to {saved}")
