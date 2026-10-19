@@ -1,0 +1,6 @@
+{
+  "192.168.12.240": {
+    "description": "CentOS Stream 9 lab VM",
+    "expected_open_ports": [22]
+  }
+}

@@ -3,10 +3,12 @@
 
 import json
 import socket
+import sys
 import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from pathlib import Path
+
 
 def check_port(target_ip, port):
      """Try to connect to one port. Return the port number if open, otherwise None."""
@@ -35,8 +37,36 @@ def scan_ports(target_host, starting_port, ending_port):
     return target_ip, open_ports
 
 
-def save_scan(target_host, target_ip, starting_port, ending_port, open_ports, elapsed):
-     """Save one scan result as a timestamped JSON file in the scans folder."""
+def load_baseline(path="baseline.json"):
+     """Read the expected-state file. Return an empty dict if it doesn't exist."""
+     baseline_file = Path(path)
+     if not baseline_file.exists():
+          print(f"No baseline file found at {path}")
+          return {}
+     return json.loads(baseline_file.read_text())
+
+
+def compare_to_baseline(target_ip, open_ports, baseline):
+     """Compare a scan to the baseline and describe any drift."""
+     if target_ip not in baseline:
+          return {"status": "NO_BASELINE", "unexpected_open": [], "missing_expected": []}
+
+     expected = set(baseline[target_ip]["expected_open_ports"])
+     actual = set(open_ports)
+
+     unexpected_open = sorted(actual - expected) # open now, but shouldn't be
+     missing_expected = sorted(expected - actual) # should be open, but isn't
+
+     status = "DRIFT" if unexpected_open or missing_expected else "PASS"
+     return {
+          "status": status,
+          "unexpected_open": unexpected_open,
+          "missing_expected": missing_expected,
+     }
+
+
+def save_scan(target_host, target_ip, starting_port, ending_port, open_ports, elapsed, drift):
+     """Save one scan result, including its drift check, as a timestamped JSON file in the scans folder."""
      scanned_at = datetime.now(timezone.utc)
 
      record = {
@@ -46,6 +76,7 @@ def save_scan(target_host, target_ip, starting_port, ending_port, open_ports, el
           "open_ports": open_ports,
           "scanned_at": scanned_at.isoformat(),
           "duration_seconds": round(elapsed, 1),
+          "drift": drift,
      }
 
      scans_dir = Path("scans")
@@ -66,9 +97,27 @@ if __name__ == "__main__":
         ip, ports = scan_ports(host, start, end)
         elapsed = time.perf_counter() - began
 
+        if not ip:
+             sys.exit(2) # couldn't resolve the host
+
         print(f"Open ports on {ip}: {ports}")
         print(f"Scanned {end - start + 1} ports in {elapsed:.1f} seconds")
 
-        if ip:
-             saved = save_scan(host, ip, start, end, ports, elapsed)
-             print(f"Saved results to {saved}")
+        drift = compare_to_baseline(ip, ports, load_baseline())
+
+        if drift["status"] == "PASS":
+             print("PASS: host matches its baseline.")
+        elif drift["status"] == "DRIFT":
+             print("DRIFF DETECTED:")
+             if drift["unexpected_open"]:
+                  print(f" Unexpected open ports: {drift['unexpected_open']}")
+             if drift["missing_expected"]:
+                  print(f" Expected ports not open: {drift['missing_expected']}")
+        else:
+             print(f"No baseline entry for {ip}; nothing to compare against.")
+
+        saved = save_scan(host, ip, start, end, ports, elapsed, drift)
+        print(f"Saved results to {saved}")
+
+        # Exit code 1 signals drift, so a scheduler or pipeline can alert on it.
+        sys.exit(1 if drift["status"] == "DRIFT" else 0)
