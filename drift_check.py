@@ -108,7 +108,7 @@ if __name__ == "__main__":
         if drift["status"] == "PASS":
              print("PASS: host matches its baseline.")
         elif drift["status"] == "DRIFT":
-             print("DRIFF DETECTED:")
+             print("DRIFT DETECTED:")
              if drift["unexpected_open"]:
                   print(f" Unexpected open ports: {drift['unexpected_open']}")
              if drift["missing_expected"]:
