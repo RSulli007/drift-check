@@ -1,0 +1,17 @@
+- name: Lab VM hardening baseline
+  hosts: localhost
+  connection: local
+  become: true
+  tasks:
+    - name: SSH service is running and enabled
+      ansible.builtin.service:
+        name: sshd
+        state: started
+        enabled: true
+
+    - name: Cockpit is not allowed through the firewall
+      ansible.posix.firewalld:
+        service: cockpit
+        state: disabled
+        permanent: true
+        immediate: true

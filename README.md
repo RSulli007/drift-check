@@ -76,6 +76,17 @@ Then I introduced drift on purpose in both directions:
 - **Scan results are excluded from Git** (`.gitignore`). Evidence can reveal internal addresses and services; the baseline (the approved state) is tracked so changes to it are reviewed.
 - **Finding from testing:** the VM's firewall allows Cockpit (9090), but Cockpit isn't running. That's an unneeded allow rule; if Cockpit were enabled later, it would be exposed without a deliberate decision. Removing unused rules is part of a hardening baseline.
 
+## Remediation with Ansible
+
+The scan testing surfaced one hardening gap: the firewall allowed Cockpit (port 9090) even though no Cockpit service was running. `ansible/baseline.yml` enforces the expected state for the lab VM:
+
+- `sshd` is running and enabled at boot
+- Cockpit is not allowed through the firewall
+
+I ran the playbook in check mode first (`ansible-playbook baseline.yml --check --diff`), which reported the Cockpit rule as drift (`changed=1`) without changing anything. I then applied it, re-ran check mode to confirm compliance (`changed=0`), and verified independently with `firewall-cmd --list-all`, which now shows only `dhcpv6-client` and `ssh`.
+
+Python detects drift in what the network can reach; Ansible enforces the configuration that prevents it.
+
 ## Limitations and next steps
 
 - TCP and IPv4 only (UDP services like `dhcpv6-client` aren't checked).
